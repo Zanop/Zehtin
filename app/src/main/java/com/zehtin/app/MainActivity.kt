@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WebSocketManager.init(this)
         enableEdgeToEdge()
         setContent {
             ZehtinTheme {

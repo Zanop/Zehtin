@@ -6,11 +6,9 @@ import kotlinx.coroutines.flow.StateFlow
 import okhttp3.*
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import android.content.Context
+import java.util.UUID
 
 object WebSocketManager {
     private const val SERVER_URL = "wss://torbalan.ddns.net/zehtin"
@@ -23,6 +21,8 @@ object WebSocketManager {
 
     var myId: String = ""
     var myName: String = ""
+
+    private var persistentId: String = ""
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages
@@ -44,6 +44,15 @@ object WebSocketManager {
         object Error : ConnectionState()
     }
 
+    fun init(context: Context) {
+        val prefs = context.getSharedPreferences("zehtin", Context.MODE_PRIVATE)
+        persistentId = prefs.getString("device_id", null) ?: run {
+            val newId = UUID.randomUUID().toString()
+            prefs.edit().putString("device_id", newId).apply()
+            newId
+        }
+    }
+
     fun connect(name: String, inviteCode: String) {
         myName = name
         lastInviteCode = inviteCode
@@ -61,6 +70,7 @@ object WebSocketManager {
                     put("type", "join")
                     put("name", name)
                     put("inviteCode", inviteCode)
+                    put("deviceId", persistentId)
                 }.toString())
 
                 // Start keepalive ping every 25 seconds
