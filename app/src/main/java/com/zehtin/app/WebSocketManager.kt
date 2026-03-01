@@ -13,7 +13,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 object WebSocketManager {
-    private const val SERVER_URL = "ws://torbalan.ddns.net:12345"
+    private const val SERVER_URL = "wss://torbalan.ddns.net/zehtin"
     private const val TAG = "ZehtinWS"
 
     private var pingJob: kotlinx.coroutines.Job? = null
