@@ -124,6 +124,11 @@ object WebSocketManager {
                         "error" -> {
                             Log.e(TAG, "Server error: ${json.getString("text")}")
                             _connectionState.value = ConnectionState.Error
+                            pingJob?.cancel()
+                            myName = ""
+                            lastInviteCode = ""
+                            _members.value = emptyList()
+                            _messages.value = emptyList()
                         }
                     }
                 } catch (e: Exception) {
