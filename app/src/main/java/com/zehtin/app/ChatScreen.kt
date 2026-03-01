@@ -23,10 +23,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
-
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 
 @Composable
 fun ChatScreen(onOpenMembers: () -> Unit) {
+    var showEditName by remember { mutableStateOf(false) }
+    var editingMember by remember { mutableStateOf<Member?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     val messages by WebSocketManager.messages.collectAsState()
     val memberCount by WebSocketManager.memberCount.collectAsState()
     val members by WebSocketManager.members.collectAsState()
@@ -91,7 +95,15 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
             modifier = Modifier.padding(bottom = 12.dp)
         ) {
             items(members) { member ->
-                MemberAvatar(member)
+                MemberAvatar(
+                    member = member,
+                    onLongPress = {
+                        if (it.id == WebSocketManager.myId) {
+                            editingMember = it
+                            showEditName = true
+                        }
+                    }
+                )
             }
         }
 
@@ -192,16 +204,40 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
                     tint = Color.White, modifier = Modifier.size(18.dp))
             }
         }
+        if (showEditName && editingMember != null) {
+            EditNameDialog(
+                currentName = editingMember!!.name,
+                onConfirm = { newName ->
+                    WebSocketManager.myName = newName
+                    WebSocketManager.savedName = newName
+                    WebSocketManager.updateMemberName(newName)
+                    showEditName = false
+                    editingMember = null
+                },
+                onDismiss = {
+                    showEditName = false
+                    editingMember = null
+                }
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun MemberAvatar(member: Member) {
+fun MemberAvatar(member: Member, onLongPress: ((Member) -> Unit)? = null) {
     val avatarColors = listOf(ZehtinOlive, ZehtinAccent, ZehtinGreen,
         Color(0xFF7A6A5A), Color(0xFF5A7A8A))
     val colorIndex = member.id.hashCode().let { if (it < 0) -it else it } % avatarColors.size
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .combinedClickable(
+                onClick = {},
+                onLongClick = { onLongPress?.invoke(member) }
+            )
+    ) {
         Box {
             Box(
                 modifier = Modifier
@@ -222,10 +258,24 @@ fun MemberAvatar(member: Member) {
                         .align(Alignment.BottomEnd)
                 )
             }
+            // Small indicator on your own avatar
+            if (member.id == WebSocketManager.myId) {
+                Box(
+                    modifier = Modifier
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(ZehtinAccent)
+                        .align(Alignment.TopEnd)
+                )
+            }
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(member.name.split(" ").first(),
-            fontSize = 10.sp, color = ZehtinMuted)
+        Text(
+            text = if (member.id == WebSocketManager.myId)
+                "You" else member.name.split(" ").first(),
+            fontSize = 10.sp,
+            color = if (member.id == WebSocketManager.myId) ZehtinAccent else ZehtinMuted
+        )
     }
 }
 
@@ -325,4 +375,55 @@ fun MessageRow(message: Message) {
             }
         }
     }
+}
+
+@Composable
+fun EditNameDialog(
+    currentName: String,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var newName by remember { mutableStateOf(currentName) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = ZehtinSurface,
+        title = {
+            Text(
+                "Edit your name",
+                fontWeight = FontWeight.Bold,
+                color = ZehtinDeep
+            )
+        },
+        text = {
+            OutlinedTextField(
+                value = newName,
+                onValueChange = { newName = it },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = ZehtinAccent,
+                    unfocusedBorderColor = ZehtinBorder,
+                    focusedTextColor = ZehtinDeep,
+                    unfocusedTextColor = ZehtinDeep,
+                    cursorColor = ZehtinAccent,
+                    focusedContainerColor = ZehtinBg,
+                    unfocusedContainerColor = ZehtinBg
+                )
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { if (newName.isNotBlank()) onConfirm(newName) },
+                colors = ButtonDefaults.buttonColors(containerColor = ZehtinAccent)
+            ) {
+                Text("Save", color = Color.White)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = ZehtinMuted)
+            }
+        }
+    )
 }

@@ -14,6 +14,7 @@ object WebSocketManager {
     private const val SERVER_URL = "wss://torbalan.ddns.net/zehtin"
     private const val TAG = "ZehtinWS"
 
+    private var appContext: Context? = null
     private var pingJob: kotlinx.coroutines.Job? = null
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
     private var client: OkHttpClient? = null
@@ -22,6 +23,8 @@ object WebSocketManager {
     var myId: String = ""
     var myName: String = ""
 
+    var savedName: String = ""
+    var savedInviteCode: String = ""
     private var persistentId: String = ""
 
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
@@ -45,13 +48,27 @@ object WebSocketManager {
     }
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         val prefs = context.getSharedPreferences("zehtin", Context.MODE_PRIVATE)
         persistentId = prefs.getString("device_id", null) ?: run {
             val newId = UUID.randomUUID().toString()
             prefs.edit().putString("device_id", newId).apply()
             newId
         }
+        savedName = prefs.getString("name", "") ?: ""
+        savedInviteCode = prefs.getString("invite_code", "") ?: ""
     }
+
+    fun saveCredentials(context: Context, name: String, inviteCode: String) {
+        val prefs = context.getSharedPreferences("zehtin", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putString("name", name)
+            .putString("invite_code", inviteCode)
+            .apply()
+        savedName = name
+        savedInviteCode = inviteCode
+    }
+
 
     fun connect(name: String, inviteCode: String) {
         myName = name
@@ -128,6 +145,21 @@ object WebSocketManager {
                             _memberCount.value = json.getInt("memberCount")
                         }
 
+                        "member_renamed" -> {
+                            val deviceId = json.getString("deviceId")
+                            val newName = json.getString("newName")
+                            val current = _members.value.toMutableList()
+                            val index = current.indexOfFirst { it.id == deviceId }
+                            if (index != -1) {
+                                val initials = newName.split(" ")
+                                    .take(2)
+                                    .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+                                    .joinToString("")
+                                current[index] = current[index].copy(name = newName, initials = initials)
+                                _members.value = current
+                            }
+                        }
+
                         "message" -> {
                             val msg = parseMessage(json.getJSONObject("message"))
                             _messages.value = _messages.value + msg
@@ -173,6 +205,7 @@ object WebSocketManager {
         webSocket?.send(JSONObject().apply {
             put("type", "message")
             put("text", text)
+            put("deviceId", persistentId)
         }.toString())
     }
 
@@ -181,6 +214,7 @@ object WebSocketManager {
             put("type", "media")
             put("mediaName", mediaName)
             put("mediaSize", mediaSize)
+            put("deviceId", persistentId)
         }.toString())
     }
 
@@ -219,4 +253,30 @@ object WebSocketManager {
             mediaSize = json.optString("mediaSize")
         )
     }
+
+    fun updateMemberName(newName: String) {
+        myName = newName
+        savedName = newName
+        // Save silently to prefs
+        appContext?.getSharedPreferences("zehtin", Context.MODE_PRIVATE)
+            ?.edit()?.putString("name", newName)?.apply()
+
+        val current = _members.value.toMutableList()
+        val index = current.indexOfFirst { it.id == myId }
+        if (index != -1) {
+            val old = current[index]
+            val initials = newName.split(" ")
+                .take(2)
+                .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+                .joinToString("")
+            current[index] = old.copy(name = newName, initials = initials)
+            _members.value = current
+        }
+        webSocket?.send(JSONObject().apply {
+            put("type", "rename")
+            put("newName", newName)
+            put("deviceId", persistentId)
+        }.toString())
+    }
+
 }

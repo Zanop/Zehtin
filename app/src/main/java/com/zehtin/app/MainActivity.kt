@@ -14,25 +14,34 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ZehtinTheme {
-                ZehtinApp()
+                ZehtinApp(context = this)
             }
         }
     }
 }
 
 @Composable
-fun ZehtinApp() {
-    var currentScreen by rememberSaveable { mutableStateOf("login") }
+fun ZehtinApp(context: android.content.Context) {
+    val startScreen = remember {
+        if (WebSocketManager.savedName.isNotEmpty() &&
+            WebSocketManager.savedInviteCode.isNotEmpty()) "chat" else "login"
+    }
+
+    var currentScreen by rememberSaveable { mutableStateOf(startScreen) }
+
+    LaunchedEffect(Unit) {
+        if (WebSocketManager.savedName.isNotEmpty() &&
+            WebSocketManager.savedInviteCode.isNotEmpty()) {
+            WebSocketManager.connect(
+                WebSocketManager.savedName,
+                WebSocketManager.savedInviteCode
+            )
+        }
+    }
 
     when (currentScreen) {
-        "login" -> LoginScreen(
-            onJoin = { currentScreen = "chat" }
-        )
-        "chat" -> ChatScreen(
-            onOpenMembers = { currentScreen = "members" }
-        )
-        "members" -> MembersScreen(
-            onBack = { currentScreen = "chat" }
-        )
+        "login" -> LoginScreen(onJoin = { currentScreen = "chat" })
+        "chat" -> ChatScreen(onOpenMembers = { currentScreen = "members" })
+        "members" -> MembersScreen(onBack = { currentScreen = "chat" })
     }
 }
