@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun LoginScreen(onJoin: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var name by remember { mutableStateOf("") }
     var inviteCode by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
@@ -28,6 +29,7 @@ fun LoginScreen(onJoin: () -> Unit) {
         when (connectionState) {
             is WebSocketManager.ConnectionState.Joined -> {
                 isLoading = false
+                WebSocketManager.saveCredentials(context, name, inviteCode)
                 onJoin()
             }
             is WebSocketManager.ConnectionState.Error -> {

@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ZehtinApp(context: android.content.Context) {
     val startScreen = remember {
+        android.util.Log.d("Zehtin", "savedName='${WebSocketManager.savedName}' savedCode='${WebSocketManager.savedInviteCode}'")
         if (WebSocketManager.savedName.isNotEmpty() &&
             WebSocketManager.savedInviteCode.isNotEmpty()) "chat" else "login"
     }
