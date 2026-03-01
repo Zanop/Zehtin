@@ -26,7 +26,7 @@ fun LoginScreen(onJoin: () -> Unit) {
 
     LaunchedEffect(connectionState) {
         when (connectionState) {
-            is WebSocketManager.ConnectionState.Connected -> {
+            is WebSocketManager.ConnectionState.Joined -> {
                 isLoading = false
                 onJoin()
             }

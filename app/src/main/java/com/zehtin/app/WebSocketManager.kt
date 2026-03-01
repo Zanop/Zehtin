@@ -39,6 +39,7 @@ object WebSocketManager {
 
     sealed class ConnectionState {
         object Connected : ConnectionState()
+        object Joined : ConnectionState()
         object Disconnected : ConnectionState()
         object Error : ConnectionState()
     }
@@ -101,6 +102,7 @@ object WebSocketManager {
                                 msgs.add(parseMessage(history.getJSONObject(i)))
                             }
                             _messages.value = msgs
+                            _connectionState.value = ConnectionState.Joined
                         }
 
                         "member_joined" -> {
