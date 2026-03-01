@@ -25,9 +25,18 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.rememberCoroutineScope
+import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.clickable
+
 
 @Composable
 fun ChatScreen(onOpenMembers: () -> Unit) {
+    var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
+    var isUploading by remember { mutableStateOf(false) }
     var showEditName by remember { mutableStateOf(false) }
     var editingMember by remember { mutableStateOf<Member?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -38,6 +47,25 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let {
+            coroutineScope.launch {
+                isUploading = true
+                val result = FileUploader.uploadFile(context, it)
+                if (result != null) {
+                    WebSocketManager.sendMedia(
+                        result.fileName,
+                        result.fileSize,
+                        result.fileUrl,
+                        result.isImage
+                    )
+                }
+                isUploading = false
+            }
+        }
+    }
     // Auto scroll to bottom when new message arrives
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
@@ -142,7 +170,10 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
                 }
             }
             items(messages) { message ->
-                MessageRow(message)
+                MessageRow(
+                    message = message,
+                    onImageClick = { url -> fullScreenImageUrl = url }
+                )
             }
         }
 
@@ -159,15 +190,23 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
         ) {
             IconButton(
                 onClick = {
-                    WebSocketManager.sendMedia("photo_shared.jpg", "1.8 MB")
+                    filePickerLauncher.launch("*/*")
                 },
                 modifier = Modifier
                     .size(36.dp)
                     .clip(CircleShape)
-                    .background(ZehtinSurface)
+                    .background(if (isUploading) ZehtinMuted else ZehtinSurface)
             ) {
-                Icon(Icons.Default.AttachFile, contentDescription = "Attach",
-                    tint = ZehtinDeep, modifier = Modifier.size(18.dp))
+                if (isUploading) {
+                    CircularProgressIndicator(
+                        color = ZehtinAccent,
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(Icons.Default.AttachFile, contentDescription = "Attach",
+                        tint = ZehtinDeep, modifier = Modifier.size(18.dp))
+                }
             }
 
             OutlinedTextField(
@@ -218,6 +257,12 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
                     showEditName = false
                     editingMember = null
                 }
+            )
+        }
+        fullScreenImageUrl?.let { url ->
+            FullScreenImageViewer(
+                imageUrl = url,
+                onDismiss = { fullScreenImageUrl = null }
             )
         }
     }
@@ -280,7 +325,7 @@ fun MemberAvatar(member: Member, onLongPress: ((Member) -> Unit)? = null) {
 }
 
 @Composable
-fun MessageRow(message: Message) {
+fun MessageRow(message: Message, onImageClick: (String) -> Unit = {}) {
     val avatarColors = listOf(ZehtinOlive, ZehtinAccent, ZehtinGreen,
         Color(0xFF7A6A5A), Color(0xFF5A7A8A))
     val colorIndex = message.senderId.hashCode().let { if (it < 0) -it else it } % avatarColors.size
@@ -316,50 +361,55 @@ fun MessageRow(message: Message) {
             }
 
             if (message.isMedia) {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = ZehtinSurface,
-                    border = ButtonDefaults.outlinedButtonBorder,
-                    modifier = Modifier.widthIn(max = 200.dp)
-                ) {
-                    Column {
-                        Box(
+                if (message.isImage && message.fileUrl.isNotEmpty()) {
+                    // Show image preview
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .widthIn(max = 220.dp)
+                            .clickable {
+                                onImageClick("https://torbalan.ddns.net${message.fileUrl}")
+                            }
+                    ) {
+                        AsyncImage(
+                            model = "https://torbalan.ddns.net${message.fileUrl}",
+                            contentDescription = message.mediaName,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(90.dp)
-                                .background(
-                                    if (message.isOutgoing) Color(0xFF2A2A1E)
-                                    else Color(0xFFE8E0D0)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("📄", fontSize = 28.sp)
-                        }
-                        Text(
-                            text = "${message.mediaName} · ${message.mediaSize}",
-                            fontSize = 11.sp,
-                            color = ZehtinMuted,
-                            modifier = Modifier.padding(8.dp)
+                                .heightIn(max = 200.dp)
+                                .clip(RoundedCornerShape(14.dp)),
+                            contentScale = androidx.compose.ui.layout.ContentScale.Crop
                         )
                     }
-                }
-            } else {
-                Surface(
-                    shape = RoundedCornerShape(
-                        topStart = 18.dp, topEnd = 18.dp,
-                        bottomStart = if (message.isOutgoing) 18.dp else 4.dp,
-                        bottomEnd = if (message.isOutgoing) 4.dp else 18.dp
-                    ),
-                    color = if (message.isOutgoing) ZehtinDeep else Color.White,
-                    modifier = Modifier.widthIn(max = 240.dp)
-                ) {
-                    Text(
-                        text = message.text,
-                        fontSize = 13.sp,
-                        color = if (message.isOutgoing) Color(0xFFF0EBE0) else ZehtinDeep,
-                        lineHeight = 20.sp,
-                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp)
-                    )
+                } else {
+                    // Show document bubble
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = ZehtinSurface,
+                        border = ButtonDefaults.outlinedButtonBorder,
+                        modifier = Modifier.widthIn(max = 200.dp)
+                    ) {
+                        Column {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(90.dp)
+                                    .background(
+                                        if (message.isOutgoing) Color(0xFF2A2A1E)
+                                        else Color(0xFFE8E0D0)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("📄", fontSize = 28.sp)
+                            }
+                            Text(
+                                text = "${message.mediaName} · ${message.mediaSize}",
+                                fontSize = 11.sp,
+                                color = ZehtinMuted,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
                 }
             }
 

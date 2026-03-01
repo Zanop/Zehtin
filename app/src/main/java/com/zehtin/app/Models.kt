@@ -21,7 +21,9 @@ data class Message(
     val isOutgoing: Boolean = false,
     val isMedia: Boolean = false,
     val mediaName: String = "",
-    val mediaSize: String = ""
+    val mediaSize: String = "",
+    val fileUrl: String = "",
+    val isImage: Boolean = false
 )
 
 val sampleMembers = listOf(

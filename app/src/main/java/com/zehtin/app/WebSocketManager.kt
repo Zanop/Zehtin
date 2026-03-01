@@ -13,29 +13,23 @@ import java.util.UUID
 object WebSocketManager {
     private const val SERVER_URL = "wss://torbalan.ddns.net/zehtin"
     private const val TAG = "ZehtinWS"
-
     private var appContext: Context? = null
     private var pingJob: kotlinx.coroutines.Job? = null
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
     private var client: OkHttpClient? = null
     private var webSocket: WebSocket? = null
-
     var myId: String = ""
     var myName: String = ""
 
     var savedName: String = ""
     var savedInviteCode: String = ""
     private var persistentId: String = ""
-
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages
-
     private val _memberCount = MutableStateFlow(0)
     val memberCount: StateFlow<Int> = _memberCount
-
     private val _members = MutableStateFlow<List<Member>>(emptyList())
     val members: StateFlow<List<Member>> = _members
-
     private val _connectionState = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
     val connectionState: StateFlow<ConnectionState> = _connectionState
     private var lastInviteCode: String = ""
@@ -209,11 +203,13 @@ object WebSocketManager {
         }.toString())
     }
 
-    fun sendMedia(mediaName: String, mediaSize: String) {
+    fun sendMedia(fileName: String, fileSize: String, fileUrl: String, isImage: Boolean) {
         webSocket?.send(JSONObject().apply {
             put("type", "media")
-            put("mediaName", mediaName)
-            put("mediaSize", mediaSize)
+            put("mediaName", fileName)
+            put("mediaSize", fileSize)
+            put("fileUrl", fileUrl)
+            put("isImage", isImage)
             put("deviceId", persistentId)
         }.toString())
     }
@@ -250,7 +246,9 @@ object WebSocketManager {
             isOutgoing = json.optString("senderId") == myId,
             isMedia = json.optBoolean("isMedia", false),
             mediaName = json.optString("mediaName"),
-            mediaSize = json.optString("mediaSize")
+            mediaSize = json.optString("mediaSize"),
+            fileUrl = json.optString("fileUrl"),
+            isImage = json.optBoolean("isImage", false)
         )
     }
 
