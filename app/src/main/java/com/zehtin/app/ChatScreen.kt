@@ -30,6 +30,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.rememberCoroutineScope
 import coil.compose.AsyncImage
 import androidx.compose.foundation.clickable
+import android.util.Patterns
+import androidx.compose.foundation.text.ClickableText
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.TextUnit
 
 
 @Composable
@@ -324,6 +331,63 @@ fun MemberAvatar(member: Member, onLongPress: ((Member) -> Unit)? = null) {
 }
 
 @Composable
+fun LinkifyText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    fontSize: TextUnit = TextUnit.Unspecified,
+    lineHeight: TextUnit = TextUnit.Unspecified,
+    linkColor: Color = ZehtinAccent
+) {
+    val uriHandler = LocalUriHandler.current
+    val annotatedString = buildAnnotatedString {
+        append(text)
+        val matcher = Patterns.WEB_URL.matcher(text)
+        while (matcher.find()) {
+            addStyle(
+                style = SpanStyle(
+                    color = linkColor,
+                    textDecoration = TextDecoration.Underline,
+                    fontWeight = FontWeight.Bold
+                ),
+                start = matcher.start(),
+                end = matcher.end()
+            )
+            addStringAnnotation(
+                tag = "URL",
+                annotation = text.substring(matcher.start(), matcher.end()),
+                start = matcher.start(),
+                end = matcher.end()
+            )
+        }
+    }
+
+    ClickableText(
+        text = annotatedString,
+        modifier = modifier,
+        style = LocalTextStyle.current.copy(
+            color = color,
+            fontSize = fontSize,
+            lineHeight = lineHeight
+        ),
+        onClick = { offset ->
+            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                .firstOrNull()?.let { annotation ->
+                    var url = annotation.item
+                    if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                        url = "https://$url"
+                    }
+                    try {
+                        uriHandler.openUri(url)
+                    } catch (e: Exception) {
+                        // ignore
+                    }
+                }
+        }
+    )
+}
+
+@Composable
 fun MessageRow(message: Message, onImageClick: (String) -> Unit = {}) {
     val avatarColors = listOf(ZehtinOlive, ZehtinAccent, ZehtinGreen,
         Color(0xFF7A6A5A), Color(0xFF5A7A8A))
@@ -420,7 +484,7 @@ fun MessageRow(message: Message, onImageClick: (String) -> Unit = {}) {
                     color = if (message.isOutgoing) ZehtinDeep else Color.White,
                     modifier = Modifier.widthIn(max = 240.dp)
                 ) {
-                    Text(
+                    LinkifyText(
                         text = message.text,
                         fontSize = 13.sp,
                         color = if (message.isOutgoing) Color(0xFFF0EBE0) else ZehtinDeep,

@@ -6,6 +6,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -14,7 +20,35 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             ZehtinTheme {
+                NotificationPermissionHandler()
                 ZehtinApp(context = this)
+            }
+        }
+    }
+}
+
+@Composable
+fun NotificationPermissionHandler() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val context = androidx.compose.ui.platform.LocalContext.current
+        var hasPermission by remember {
+            mutableStateOf(
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            )
+        }
+
+        val launcher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { isGranted ->
+            hasPermission = isGranted
+        }
+
+        LaunchedEffect(Unit) {
+            if (!hasPermission) {
+                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
     }

@@ -9,6 +9,15 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
 import android.content.Context
 import java.util.UUID
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
 
 object WebSocketManager {
     private const val SERVER_URL = "wss://torbalan.ddns.net/zehtin"
@@ -51,6 +60,22 @@ object WebSocketManager {
         }
         savedName = prefs.getString("name", "") ?: ""
         savedInviteCode = prefs.getString("invite_code", "") ?: ""
+
+        createNotificationChannel(context)
+    }
+
+    private fun createNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val name = "Chat Messages"
+            val descriptionText = "Notifications for new chat messages"
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+            val channel = NotificationChannel("chat_messages", name, importance).apply {
+                description = descriptionText
+            }
+            val notificationManager: NotificationManager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.createNotificationChannel(channel)
+        }
     }
 
     fun saveCredentials(context: Context, name: String, inviteCode: String) {
@@ -157,6 +182,9 @@ object WebSocketManager {
                         "message" -> {
                             val msg = parseMessage(json.getJSONObject("message"))
                             _messages.value = _messages.value + msg
+                            if (msg.senderId != myId) {
+                                showNotification(msg)
+                            }
                         }
 
                         "error" -> {
@@ -193,6 +221,32 @@ object WebSocketManager {
                 pingJob?.cancel()
             }
         })
+    }
+
+    private fun showNotification(message: Message) {
+        val context = appContext ?: return
+        
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+            context, 0, intent, 
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val builder = NotificationCompat.Builder(context, "chat_messages")
+            .setSmallIcon(android.R.drawable.ic_dialog_email) // Fallback icon
+            .setContentTitle(message.senderName)
+            .setContentText(if (message.isMedia) "Sent a file" else message.text)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+
+        with(NotificationManagerCompat.from(context)) {
+            if (ActivityCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                notify(System.currentTimeMillis().toInt(), builder.build())
+            }
+        }
     }
 
     fun sendMessage(text: String) {
