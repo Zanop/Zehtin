@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "881989359736",
+    "project_id": "zehtin-76af4",
+    "storage_bucket": "zehtin-76af4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:881989359736:android:a965ca3ba96b433c9cb58d",
+        "android_client_info": {
+          "package_name": "com.zehtin.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCt49_1mz5Coz-UfmHLeC1gH14AoLm5-Mo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

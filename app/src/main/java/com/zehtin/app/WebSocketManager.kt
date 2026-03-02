@@ -18,6 +18,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
+import com.google.firebase.messaging.FirebaseMessaging
 
 object WebSocketManager {
     private const val SERVER_URL = "wss://torbalan.ddns.net/zehtin"
@@ -62,6 +63,16 @@ object WebSocketManager {
         savedInviteCode = prefs.getString("invite_code", "") ?: ""
 
         createNotificationChannel(context)
+        
+        // Fetch token but don't send until joined
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (task.isSuccessful) {
+                val token = task.result
+                Log.d("FCM", "Token fetched: $token")
+                appContext?.getSharedPreferences("zehtin", Context.MODE_PRIVATE)
+                    ?.edit()?.putString("fcm_token", token)?.apply()
+            }
+        }
     }
 
     private fun createNotificationChannel(context: Context) {
@@ -90,6 +101,13 @@ object WebSocketManager {
 
 
     fun connect(name: String, inviteCode: String) {
+        // Prevent multiple simultaneous connection attempts
+        if (_connectionState.value == ConnectionState.Connected || 
+            _connectionState.value == ConnectionState.Joined) {
+            Log.d(TAG, "Already connected or joined, skipping connect request.")
+            return
+        }
+
         myName = name
         lastInviteCode = inviteCode
         client = OkHttpClient.Builder()
@@ -102,11 +120,16 @@ object WebSocketManager {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 Log.d(TAG, "Connected to Zehtin server")
                 _connectionState.value = ConnectionState.Connected
+                
+                val fcmToken = appContext?.getSharedPreferences("zehtin", Context.MODE_PRIVATE)
+                    ?.getString("fcm_token", null)
+
                 webSocket.send(JSONObject().apply {
                     put("type", "join")
                     put("name", name)
                     put("inviteCode", inviteCode)
                     put("deviceId", persistentId)
+                    if (fcmToken != null) put("fcmToken", fcmToken)
                 }.toString())
 
                 // Start keepalive ping every 25 seconds
@@ -128,18 +151,18 @@ object WebSocketManager {
 
                         "joined" -> {
                             myId = json.getString("id")
-                            _members.value = emptyList()
+                            val newMembers = mutableListOf<Member>()
 
-                            // Load existing members
+                            // Load all existing members (online and offline)
                             val membersList = json.optJSONArray("members")
                             if (membersList != null) {
                                 for (i in 0 until membersList.length()) {
                                     val m = membersList.getJSONObject(i)
-                                    updateMembers(m.getString("id"), m.getString("name"), true)
+                                    newMembers.add(parseMember(m))
                                 }
                             }
-                            // Add yourself if not already in list
-                            updateMembers(myId, myName, true)
+                            _members.value = newMembers
+                            _memberCount.value = newMembers.count { it.isOnline }
 
                             // Load message history
                             val history = json.getJSONArray("history")
@@ -151,32 +174,10 @@ object WebSocketManager {
                             _connectionState.value = ConnectionState.Joined
                         }
 
-                        "member_joined" -> {
-                            val name = json.getString("name")
-                            val id = json.optString("memberId", name)
-                            updateMembers(id, name, true)
-                            _memberCount.value = json.getInt("memberCount")
-                        }
-
-                        "member_left" -> {
-                            val name = json.getString("name")
-                            removeMembers(name)
-                            _memberCount.value = json.getInt("memberCount")
-                        }
-
-                        "member_renamed" -> {
-                            val deviceId = json.getString("deviceId")
-                            val newName = json.getString("newName")
-                            val current = _members.value.toMutableList()
-                            val index = current.indexOfFirst { it.id == deviceId }
-                            if (index != -1) {
-                                val initials = newName.split(" ")
-                                    .take(2)
-                                    .mapNotNull { it.firstOrNull()?.uppercaseChar() }
-                                    .joinToString("")
-                                current[index] = current[index].copy(name = newName, initials = initials)
-                                _members.value = current
-                            }
+                        "member_update" -> {
+                            val memberJson = json.getJSONObject("member")
+                            val updatedMember = parseMember(memberJson)
+                            updateMembersList(updatedMember)
                         }
 
                         "message" -> {
@@ -223,7 +224,39 @@ object WebSocketManager {
         })
     }
 
+    private fun parseMember(json: JSONObject): Member {
+        val name = json.getString("name")
+        val initials = name.split(" ")
+            .take(2)
+            .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+            .joinToString("")
+        
+        return Member(
+            id = json.getString("id"),
+            name = name,
+            initials = initials,
+            isOnline = json.optBoolean("isOnline", false),
+            lastSeen = if (json.isNull("lastSeen")) null else json.getLong("lastSeen")
+        )
+    }
+
+    private fun updateMembersList(updatedMember: Member) {
+        val current = _members.value.toMutableList()
+        val index = current.indexOfFirst { it.id == updatedMember.id }
+        if (index != -1) {
+            current[index] = updatedMember
+        } else {
+            current.add(updatedMember)
+        }
+        _members.value = current
+        _memberCount.value = current.count { it.isOnline }
+    }
+
     private fun showNotification(message: Message) {
+        triggerManualNotification(message)
+    }
+
+    fun triggerManualNotification(message: Message) {
         val context = appContext ?: return
         
         val intent = Intent(context, MainActivity::class.java).apply {
@@ -235,7 +268,7 @@ object WebSocketManager {
         )
 
         val builder = NotificationCompat.Builder(context, "chat_messages")
-            .setSmallIcon(android.R.drawable.ic_dialog_email) // Fallback icon
+            .setSmallIcon(android.R.drawable.ic_dialog_email)
             .setContentTitle(message.senderName)
             .setContentText(if (message.isMedia) "Sent a file" else message.text)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
@@ -268,16 +301,26 @@ object WebSocketManager {
         }.toString())
     }
 
-    private fun updateMembers(id: String, name: String, isOnline: Boolean) {
-        val initials = name.split(" ")
-            .take(2)
-            .mapNotNull { it.firstOrNull()?.uppercaseChar() }
-            .joinToString("")
-        val current = _members.value.toMutableList()
-        if (current.none { it.id == id }) {
-            current.add(Member(id = id, name = name, initials = initials, isOnline = isOnline))
-            _members.value = current
+    fun sendFcmToken(token: String) {
+        // Only attempt to send if we are actively connected to the server
+        if (_connectionState.value != ConnectionState.Joined && 
+            _connectionState.value != ConnectionState.Connected) {
+            // Save locally, it will be picked up in the next onOpen/join
+            appContext?.getSharedPreferences("zehtin", Context.MODE_PRIVATE)
+                ?.edit()?.putString("fcm_token", token)?.apply()
+            return
         }
+
+        val json = JSONObject().apply {
+            put("type", "update_fcm_token")
+            put("fcmToken", token)
+            put("deviceId", persistentId)
+        }
+        webSocket?.send(json.toString())
+        
+        // Also save it locally
+        appContext?.getSharedPreferences("zehtin", Context.MODE_PRIVATE)
+            ?.edit()?.putString("fcm_token", token)?.apply()
     }
 
     private fun removeMembers(name: String) {

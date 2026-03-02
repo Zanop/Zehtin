@@ -31,9 +31,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import coil.compose.AsyncImage
 import androidx.compose.foundation.clickable
 import android.util.Patterns
-import androidx.compose.foundation.text.ClickableText
-import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.TextUnit
@@ -339,51 +339,42 @@ fun LinkifyText(
     lineHeight: TextUnit = TextUnit.Unspecified,
     linkColor: Color = ZehtinAccent
 ) {
-    val uriHandler = LocalUriHandler.current
     val annotatedString = buildAnnotatedString {
         append(text)
         val matcher = Patterns.WEB_URL.matcher(text)
         while (matcher.find()) {
-            addStyle(
-                style = SpanStyle(
-                    color = linkColor,
-                    textDecoration = TextDecoration.Underline,
-                    fontWeight = FontWeight.Bold
+            val url = text.substring(matcher.start(), matcher.end())
+            val fullUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                "https://$url"
+            } else {
+                url
+            }
+            
+            addLink(
+                url = LinkAnnotation.Url(
+                    url = fullUrl,
+                    styles = TextLinkStyles(
+                        style = SpanStyle(
+                            color = linkColor,
+                            textDecoration = TextDecoration.Underline,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
                 ),
-                start = matcher.start(),
-                end = matcher.end()
-            )
-            addStringAnnotation(
-                tag = "URL",
-                annotation = text.substring(matcher.start(), matcher.end()),
                 start = matcher.start(),
                 end = matcher.end()
             )
         }
     }
 
-    ClickableText(
+    Text(
         text = annotatedString,
         modifier = modifier,
         style = LocalTextStyle.current.copy(
             color = color,
             fontSize = fontSize,
             lineHeight = lineHeight
-        ),
-        onClick = { offset ->
-            annotatedString.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                .firstOrNull()?.let { annotation ->
-                    var url = annotation.item
-                    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                        url = "https://$url"
-                    }
-                    try {
-                        uriHandler.openUri(url)
-                    } catch (e: Exception) {
-                        // ignore
-                    }
-                }
-        }
+        )
     )
 }
 

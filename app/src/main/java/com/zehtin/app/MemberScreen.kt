@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.text.format.DateUtils
 
 @Composable
 fun MembersScreen(onBack: () -> Unit) {
@@ -192,8 +193,22 @@ fun MemberRow(member: Member) {
                 fontWeight = FontWeight.SemiBold,
                 color = ZehtinDeep
             )
+            
+            val lastSeenText = if (member.isOnline) {
+                "🟢 Online"
+            } else if (member.lastSeen != null) {
+                val relativeTime = DateUtils.getRelativeTimeSpanString(
+                    member.lastSeen,
+                    System.currentTimeMillis(),
+                    DateUtils.MINUTE_IN_MILLIS
+                )
+                "⚫ Last seen $relativeTime"
+            } else {
+                "⚫ Offline"
+            }
+            
             Text(
-                text = if (member.isOnline) "🟢 Online" else "⚫ Last seen ${member.lastSeen}",
+                text = lastSeenText,
                 fontSize = 11.sp,
                 color = ZehtinMuted,
                 modifier = Modifier.padding(top = 2.dp)
