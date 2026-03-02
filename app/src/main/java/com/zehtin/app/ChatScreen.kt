@@ -411,6 +411,24 @@ fun MessageRow(message: Message, onImageClick: (String) -> Unit = {}) {
                         }
                     }
                 }
+            } else {
+                Surface(
+                    shape = RoundedCornerShape(
+                        topStart = 18.dp, topEnd = 18.dp,
+                        bottomStart = if (message.isOutgoing) 18.dp else 4.dp,
+                        bottomEnd = if (message.isOutgoing) 4.dp else 18.dp
+                    ),
+                    color = if (message.isOutgoing) ZehtinDeep else Color.White,
+                    modifier = Modifier.widthIn(max = 240.dp)
+                ) {
+                    Text(
+                        text = message.text,
+                        fontSize = 13.sp,
+                        color = if (message.isOutgoing) Color(0xFFF0EBE0) else ZehtinDeep,
+                        lineHeight = 20.sp,
+                        modifier = Modifier.padding(horizontal = 13.dp, vertical = 9.dp)
+                    )
+                }
             }
 
             Row(
