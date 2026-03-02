@@ -138,7 +138,7 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
         HorizontalDivider(color = ZehtinBorder, modifier = Modifier.padding(horizontal = 20.dp))
 
         Text(
-            text = "Group · ${if (memberCount > 0) memberCount else sampleMembers.size} members",
+            text = "Group · ${if (memberCount > 0) memberCount else members.size} members",
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 2.sp,
