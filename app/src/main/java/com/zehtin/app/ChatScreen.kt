@@ -272,8 +272,6 @@ fun ChatScreen(onOpenMembers: () -> Unit, onOpenSettings: () -> Unit) {
             EditNameDialog(
                 currentName = editingMember!!.name,
                 onConfirm = { newName ->
-                    WebSocketManager.myName = newName
-                    WebSocketManager.savedName = newName
                     WebSocketManager.updateMemberName(newName)
                     showEditName = false
                     editingMember = null

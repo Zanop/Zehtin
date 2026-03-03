@@ -29,10 +29,14 @@ object WebSocketManager {
     private var client: OkHttpClient? = null
     private var webSocket: WebSocket? = null
     var myId: String = ""
-    var myName: String = ""
+    
+    private val _myName = MutableStateFlow("")
+    val myName: StateFlow<String> = _myName
+
+    private val _savedInviteCode = MutableStateFlow("")
+    val savedInviteCode: StateFlow<String> = _savedInviteCode
 
     var savedName: String = ""
-    var savedInviteCode: String = ""
     private var persistentId: String = ""
     private val _messages = MutableStateFlow<List<Message>>(emptyList())
     val messages: StateFlow<List<Message>> = _messages
@@ -60,7 +64,8 @@ object WebSocketManager {
             newId
         }
         savedName = prefs.getString("name", "") ?: ""
-        savedInviteCode = prefs.getString("invite_code", "") ?: ""
+        _savedInviteCode.value = prefs.getString("invite_code", "") ?: ""
+        if (_myName.value.isEmpty()) _myName.value = savedName
 
         createNotificationChannel(context)
         
@@ -96,7 +101,8 @@ object WebSocketManager {
             .putString("invite_code", inviteCode)
             .apply()
         savedName = name
-        savedInviteCode = inviteCode
+        _savedInviteCode.value = inviteCode
+        _myName.value = name
     }
 
 
@@ -108,7 +114,7 @@ object WebSocketManager {
             return
         }
 
-        myName = name
+        _myName.value = name
         lastInviteCode = inviteCode
         client = OkHttpClient.Builder()
             .pingInterval(30, TimeUnit.SECONDS)
@@ -126,7 +132,7 @@ object WebSocketManager {
 
                 webSocket.send(JSONObject().apply {
                     put("type", "join")
-                    put("name", name)
+                    put("name", _myName.value)
                     put("inviteCode", inviteCode)
                     put("deviceId", persistentId)
                     if (fcmToken != null) put("fcmToken", fcmToken)
@@ -192,8 +198,8 @@ object WebSocketManager {
                             Log.e(TAG, "Server error: ${json.getString("text")}")
                             _connectionState.value = ConnectionState.Error
                             pingJob?.cancel()
-                            myName = ""
-                            lastInviteCode = ""
+                            // _myName.value = "" // Don't clear local name on error to keep UI state consistent
+                            _savedInviteCode.value = ""
                             _members.value = emptyList()
                             _messages.value = emptyList()
                         }
@@ -210,9 +216,9 @@ object WebSocketManager {
                 // Auto reconnect after 3 seconds
                 scope.launch {
                     kotlinx.coroutines.delay(3000)
-                    if (myName.isNotEmpty()) {
+                    if (_myName.value.isNotEmpty()) {
                         Log.d(TAG, "Attempting reconnect...")
-                        connect(myName, lastInviteCode)
+                        connect(_myName.value, lastInviteCode)
                     }
                 }
             }
@@ -350,7 +356,7 @@ object WebSocketManager {
     }
 
     fun updateMemberName(newName: String) {
-        myName = newName
+        _myName.value = newName
         savedName = newName
         // Save silently to prefs
         appContext?.getSharedPreferences("zehtin", Context.MODE_PRIVATE)

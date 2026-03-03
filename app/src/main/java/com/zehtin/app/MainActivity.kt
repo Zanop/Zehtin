@@ -61,10 +61,12 @@ fun NotificationPermissionHandler() {
 
 @Composable
 fun ZehtinApp(context: android.content.Context) {
+    val savedName = WebSocketManager.myName.collectAsState().value
+    val savedInviteCode = WebSocketManager.savedInviteCode.collectAsState().value
+
     val startScreen = remember {
-        android.util.Log.d("Zehtin", "savedName='${WebSocketManager.savedName}' savedCode='${WebSocketManager.savedInviteCode}'")
-        if (WebSocketManager.savedName.isNotEmpty() &&
-            WebSocketManager.savedInviteCode.isNotEmpty()) "chat" else "login"
+        android.util.Log.d("Zehtin", "savedName='$savedName' savedCode='$savedInviteCode'")
+        if (savedName.isNotEmpty() && savedInviteCode.isNotEmpty()) "chat" else "login"
     }
 
     var currentScreen by rememberSaveable { mutableStateOf(startScreen) }
@@ -79,12 +81,8 @@ fun ZehtinApp(context: android.content.Context) {
             updateInfo = info
         }
 
-        if (WebSocketManager.savedName.isNotEmpty() &&
-            WebSocketManager.savedInviteCode.isNotEmpty()) {
-            WebSocketManager.connect(
-                WebSocketManager.savedName,
-                WebSocketManager.savedInviteCode
-            )
+        if (savedName.isNotEmpty() && savedInviteCode.isNotEmpty()) {
+            WebSocketManager.connect(savedName, savedInviteCode)
         }
     }
 
