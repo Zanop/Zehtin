@@ -22,6 +22,12 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
+// Ensure directories exist
+const uploadsDir = path.join(__dirname, 'uploads');
+const updatesDir = path.join(__dirname, 'updates');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir);
+if (!fs.existsSync(updatesDir)) fs.mkdirSync(updatesDir);
+
 // File upload setup
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
@@ -53,7 +59,7 @@ const upload = multer({
 });
 
 const PORT = 12345;
-const INVITE_CODE = 'zehtin2024';
+const INVITE_CODE = 'zehtin2024'; // Change this to your secret code
 const OFFLINE_TIMEOUT = 60000; // 1 minute grace period before marking offline
 
 // Store connected clients and messages
@@ -63,11 +69,11 @@ const TOKENS_FILE = './tokens.json';
 const MEMBERS_FILE = './members.json';
 const MAX_MESSAGES = 1000;
 
+// Load data from disk on startup
 let messages = [];
 let fcmTokens = {}; // deviceId -> token
 let knownMembers = {}; // deviceId -> { name, lastSeen, isOnline }
 
-// Load data from disk
 try {
     if (fs.existsSync(MESSAGES_FILE)) {
         messages = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
@@ -87,6 +93,7 @@ try {
     console.error(`[${new Date().toISOString()}] Load error:`, e);
 }
 
+// Save messages to disk
 function saveMessages() {
     try {
         fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messages));
@@ -117,18 +124,40 @@ app.use(express.json());
 app.get('/', (req, res) => res.json({ status: 'Zehtin server running', members: Object.keys(knownMembers).length, tokens: Object.keys(fcmTokens).length }));
 app.get('/zehtin', (req, res) => res.json({ status: 'Zehtin server running', members: Object.keys(knownMembers).length }));
 
-// File endpoints
+// Update endpoints
+app.get('/zehtin/update/version.json', (req, res) => {
+    const versionPath = path.join(updatesDir, 'version.json');
+    if (fs.existsSync(versionPath)) {
+        res.sendFile(versionPath);
+    } else {
+        res.status(404).json({ error: 'No update info available' });
+    }
+});
+
+app.get('/zehtin/update/:filename', (req, res) => {
+    const filePath = path.join(updatesDir, req.params.filename);
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).json({ error: 'Update file not found' });
+    }
+});
+
+// File upload endpoint
 app.post('/zehtin/upload', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const fileUrl = `/zehtin/files/${req.file.filename}`;
+    // Schedule deletion after 24 hours
     setTimeout(() => {
         fs.unlink(req.file.path, (err) => {
-            if (!err) console.log(`[${new Date().toISOString()}] Deleted expired file: ${req.file.filename}`);
+            if (err) console.error('Error deleting file:', err);
+            else console.log(`[${new Date().toISOString()}] Deleted expired file: ${req.file.filename}`);
         });
     }, 24 * 60 * 60 * 1000);
     res.json({ fileUrl, fileName: req.file.originalname, fileSize: `${(req.file.size / 1024).toFixed(1)} KB`, isImage: req.file.mimetype.startsWith('image/') });
 });
 
+// File download endpoint
 app.get('/zehtin/files/:filename', (req, res) => {
     const filePath = path.join(__dirname, 'uploads', req.params.filename);
     if (fs.existsSync(filePath)) res.sendFile(filePath);
@@ -144,6 +173,7 @@ wss.on('connection', (ws) => {
       const msg = JSON.parse(data);
       const deviceId = msg.deviceId || socketId;
 
+      // Block all messages from unjoined clients except 'join' and 'ping'
       if (!clients.has(deviceId) && !['join', 'ping'].includes(msg.type)) {
           ws.send(JSON.stringify({ type: 'error', text: 'Not authenticated' }));
           console.log(`[${new Date().toISOString()}] Blocked unauthenticated message type=${msg.type} from ${deviceId}`);
@@ -151,11 +181,13 @@ wss.on('connection', (ws) => {
       }
 
       switch (msg.type) {
+        // Member joins
         case 'join':
             if (msg.inviteCode !== INVITE_CODE) {
                 ws.send(JSON.stringify({ type: 'error', text: 'Invalid code' }));
                 return setTimeout(() => ws.close(), 100);
             }
+            // Remove old socket if same device reconnects
             clients.set(deviceId, { ws, name: msg.name, deviceId, socketId });
             console.log(`[${new Date().toISOString()}] ${msg.name} joined (device: ${deviceId})`);
 
@@ -172,6 +204,7 @@ wss.on('connection', (ws) => {
                 console.log(`[${new Date().toISOString()}] Received FCM token for ${msg.name} during join`);
             }
 
+            // Build current members list (including online and offline)
             const membersList = Object.keys(knownMembers).map(id => ({
                 id,
                 name: knownMembers[id].name,
@@ -191,6 +224,7 @@ wss.on('connection', (ws) => {
             }
             break;
 
+        // New chat message or media
         case 'message':
         case 'media':
             const client = clients.get(deviceId);
@@ -217,6 +251,7 @@ wss.on('connection', (ws) => {
             sendPushNotifications(chatMsg);
             break;
 
+        // Rename
         case 'rename':
             const c = clients.get(deviceId);
             if (c) {
@@ -228,6 +263,7 @@ wss.on('connection', (ws) => {
             }
             break;
 
+        // Ping keepalive
         case 'ping':
           ws.send(JSON.stringify({ type: 'pong' }));
           break;
@@ -236,6 +272,7 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
+      // Find client by socketId since we key by deviceId
       let leftDeviceId = null;
       let leftName = null;
       clients.forEach((c, id) => {
@@ -247,6 +284,7 @@ wss.on('connection', (ws) => {
 
       if (leftDeviceId) {
           console.log(`[${new Date().toISOString()}] ${leftName} disconnected`);
+          // Give grace period for reconnection
           setTimeout(() => {
               const current = clients.get(leftDeviceId);
               if (!current || current.socketId === socketId) {
@@ -262,13 +300,20 @@ wss.on('connection', (ws) => {
           }, OFFLINE_TIMEOUT);
       }
   });
+
+  ws.on('error', (err) => console.error('WS error:', err));
 });
 
 async function sendPushNotifications(message) {
-    if (!admin.apps.length) return;
+    if (!admin.apps.length) {
+        console.log(`[${new Date().toISOString()}] FCM skip: Firebase Admin not initialized`);
+        return;
+    }
 
     const tokens = [];
     const recipients = [];
+
+    console.log(`[${new Date().toISOString()}] Analyzing push targets... Stored tokens: ${Object.keys(fcmTokens).length}`);
 
     for (const [deviceId, token] of Object.entries(fcmTokens)) {
         const client = clients.get(deviceId);
@@ -279,7 +324,10 @@ async function sendPushNotifications(message) {
         }
     }
 
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) {
+        console.log(`[${new Date().toISOString()}] FCM: No offline recipients with valid tokens found.`);
+        return;
+    }
 
     try {
         const response = await admin.messaging().sendEachForMulticast({
@@ -310,6 +358,7 @@ async function sendPushNotifications(message) {
     }
 }
 
+// Send to all except sender
 function broadcast(data, excludeId) {
   const json = JSON.stringify(data);
   clients.forEach((c, id) => {
@@ -317,6 +366,7 @@ function broadcast(data, excludeId) {
   });
 }
 
+// Send to everyone
 function broadcastAll(data) {
   const json = JSON.stringify(data);
   clients.forEach((c) => {
@@ -324,4 +374,4 @@ function broadcastAll(data) {
   });
 }
 
-server.listen(PORT, () => console.log(`[${new Date().toISOString()}] Zehtin server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`[${new Date().toISOString()}] Zehtin server running on port ${PORT}. Updates folder: ${updatesDir}`));

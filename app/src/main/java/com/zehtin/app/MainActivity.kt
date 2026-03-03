@@ -12,6 +12,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import androidx.compose.material3.*
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.Box
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,8 +66,16 @@ fun ZehtinApp(context: android.content.Context) {
     }
 
     var currentScreen by rememberSaveable { mutableStateOf(startScreen) }
+    var updateUrl by remember { mutableStateOf<String?>(null) }
+    var isDownloading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
+        // Check for updates on startup
+        UpdateManager.checkForUpdates(context) { url ->
+            updateUrl = url
+        }
+
         if (WebSocketManager.savedName.isNotEmpty() &&
             WebSocketManager.savedInviteCode.isNotEmpty()) {
             WebSocketManager.connect(
@@ -74,9 +85,43 @@ fun ZehtinApp(context: android.content.Context) {
         }
     }
 
-    when (currentScreen) {
-        "login" -> LoginScreen(onJoin = { currentScreen = "chat" })
-        "chat" -> ChatScreen(onOpenMembers = { currentScreen = "members" })
-        "members" -> MembersScreen(onBack = { currentScreen = "chat" })
+    Box {
+        when (currentScreen) {
+            "login" -> LoginScreen(onJoin = { currentScreen = "chat" })
+            "chat" -> ChatScreen(onOpenMembers = { currentScreen = "members" })
+            "members" -> MembersScreen(onBack = { currentScreen = "chat" })
+        }
+
+        // Update Dialog
+        updateUrl?.let { url ->
+            AlertDialog(
+                onDismissRequest = { if (!isDownloading) updateUrl = null },
+                title = { Text("Update Available") },
+                text = { 
+                    Text(if (isDownloading) "Downloading update..." else "A new version of Zehtin is available. Would you like to update now?")
+                },
+                confirmButton = {
+                    if (!isDownloading) {
+                        Button(onClick = {
+                            isDownloading = true
+                            scope.launch {
+                                UpdateManager.downloadAndInstallApk(context, url)
+                                isDownloading = false
+                                updateUrl = null
+                            }
+                        }) {
+                            Text("Update")
+                        }
+                    }
+                },
+                dismissButton = {
+                    if (!isDownloading) {
+                        TextButton(onClick = { updateUrl = null }) {
+                            Text("Later")
+                        }
+                    }
+                }
+            )
+        }
     }
 }

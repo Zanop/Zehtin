@@ -37,6 +37,7 @@ import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.TextUnit
+import android.os.Build
 
 
 @Composable
@@ -52,6 +53,15 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
     var inputText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
+
+    val appVersion = remember {
+        try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            pInfo.versionName
+        } catch (e: Exception) {
+            "1.0"
+        }
+    }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -93,10 +103,19 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row {
-                Text("Zeh", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = ZehtinDeep)
-                Text("ti", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = ZehtinAccent)
-                Text("n", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = ZehtinDeep)
+            Row(verticalAlignment = Alignment.Bottom) {
+                Row {
+                    Text("Zeh", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = ZehtinDeep)
+                    Text("ti", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = ZehtinAccent)
+                    Text("n", fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = ZehtinDeep)
+                }
+                Text(
+                    text = "v$appVersion",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = ZehtinMuted,
+                    modifier = Modifier.padding(start = 6.dp, bottom = 4.dp)
+                )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 IconButton(
