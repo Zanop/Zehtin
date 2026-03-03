@@ -10,7 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
@@ -41,7 +41,7 @@ import android.os.Build
 
 
 @Composable
-fun ChatScreen(onOpenMembers: () -> Unit) {
+fun ChatScreen(onOpenMembers: () -> Unit, onOpenSettings: () -> Unit) {
     var fullScreenImageUrl by remember { mutableStateOf<String?>(null) }
     var isUploading by remember { mutableStateOf(false) }
     var showEditName by remember { mutableStateOf(false) }
@@ -129,13 +129,13 @@ fun ChatScreen(onOpenMembers: () -> Unit) {
                         tint = ZehtinDeep, modifier = Modifier.size(18.dp))
                 }
                 IconButton(
-                    onClick = {},
+                    onClick = onOpenSettings,
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape)
                         .background(ZehtinSurface)
                 ) {
-                    Icon(Icons.Default.Lock, contentDescription = "Encrypted",
+                    Icon(Icons.Default.Settings, contentDescription = "Settings",
                         tint = ZehtinOlive, modifier = Modifier.size(18.dp))
                 }
             }

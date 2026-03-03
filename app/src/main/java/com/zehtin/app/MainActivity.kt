@@ -91,8 +91,12 @@ fun ZehtinApp(context: android.content.Context) {
     Box {
         when (currentScreen) {
             "login" -> LoginScreen(onJoin = { currentScreen = "chat" })
-            "chat" -> ChatScreen(onOpenMembers = { currentScreen = "members" })
+            "chat" -> ChatScreen(
+                onOpenMembers = { currentScreen = "members" },
+                onOpenSettings = { currentScreen = "settings" }
+            )
             "members" -> MembersScreen(onBack = { currentScreen = "chat" })
+            "settings" -> SettingsScreen(onBack = { currentScreen = "chat" })
         }
 
         // Update Dialog
