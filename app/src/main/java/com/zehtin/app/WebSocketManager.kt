@@ -198,8 +198,8 @@ object WebSocketManager {
                             Log.e(TAG, "Server error: ${json.getString("text")}")
                             _connectionState.value = ConnectionState.Error
                             pingJob?.cancel()
-                            // _myName.value = "" // Don't clear local name on error to keep UI state consistent
-                            _savedInviteCode.value = ""
+                            // _myName.value = "" // Keep name on error
+                            // _savedInviteCode.value = "" // Keep code on error so user can fix it
                             _members.value = emptyList()
                             _messages.value = emptyList()
                         }
