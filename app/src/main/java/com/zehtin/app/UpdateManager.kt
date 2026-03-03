@@ -19,7 +19,9 @@ object UpdateManager {
     private const val VERSION_URL = "https://torbalan.ddns.net/zehtin/update/version.json"
     private val client = OkHttpClient()
 
-    suspend fun checkForUpdates(context: Context, onUpdateAvailable: (apkUrl: String) -> Unit) {
+    data class UpdateInfo(val apkUrl: String, val description: String?)
+
+    suspend fun checkForUpdates(context: Context, onUpdateAvailable: (UpdateInfo) -> Unit) {
         withContext(Dispatchers.IO) {
             try {
                 val request = Request.Builder().url(VERSION_URL).build()
@@ -29,6 +31,7 @@ object UpdateManager {
                     val json = JSONObject(body)
                     val remoteVersionCode = json.getInt("versionCode")
                     val apkUrl = json.getString("apkUrl")
+                    val description = json.optString("description", "")
 
                     val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                     val currentVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -40,7 +43,7 @@ object UpdateManager {
 
                     if (remoteVersionCode > currentVersionCode) {
                         withContext(Dispatchers.Main) {
-                            onUpdateAvailable(apkUrl)
+                            onUpdateAvailable(UpdateInfo(apkUrl, description.ifEmpty { null }))
                         }
                     }
                 }
@@ -50,17 +53,38 @@ object UpdateManager {
         }
     }
 
-    suspend fun downloadAndInstallApk(context: Context, apkUrl: String) {
+    suspend fun downloadAndInstallApk(
+        context: Context,
+        apkUrl: String,
+        onProgress: (Float) -> Unit
+    ) {
         withContext(Dispatchers.IO) {
             try {
                 val request = Request.Builder().url(apkUrl).build()
                 val response = client.newCall(request).execute()
                 if (!response.isSuccessful) return@withContext
 
+                val body = response.body ?: return@withContext
+                val totalBytes = body.contentLength()
                 val apkFile = File(context.cacheDir, "update.apk")
-                val fos = FileOutputStream(apkFile)
-                fos.write(response.body?.bytes() ?: return@withContext)
-                fos.close()
+                
+                body.byteStream().use { input ->
+                    FileOutputStream(apkFile).use { output ->
+                        val buffer = ByteArray(8 * 1024)
+                        var bytesRead: Int
+                        var totalRead: Long = 0
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            totalRead += bytesRead
+                            if (totalBytes > 0) {
+                                val progress = totalRead.toFloat() / totalBytes
+                                withContext(Dispatchers.Main) {
+                                    onProgress(progress)
+                                }
+                            }
+                        }
+                    }
+                }
 
                 withContext(Dispatchers.Main) {
                     installApk(context, apkFile)
