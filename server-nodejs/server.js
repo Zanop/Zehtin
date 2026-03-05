@@ -45,7 +45,7 @@ const upload = multer({
     limits: { fileSize: 20 * 1024 * 1024 }, // 20MB max
     fileFilter: (req, file, cb) => {
         const allowed = [
-            'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif',
             'application/pdf',
             'application/msword',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -154,14 +154,17 @@ app.post('/zehtin/upload', upload.single('file'), (req, res) => {
             else console.log(`[${new Date().toISOString()}] Deleted expired file: ${req.file.filename}`);
         });
     }, 24 * 60 * 60 * 1000);
-    res.json({ fileUrl, fileName: req.file.originalname, fileSize: `${(req.file.size / 1024).toFixed(1)} KB`, isImage: req.file.mimetype.startsWith('image/') });
+    res.json({ fileUrl, fileName: req.file.originalname, fileSize: `${(req.file.size / 1024).toFixed(1)} KB`, isImage: req.file.mimetype.startsWith('image/') || req.file.mimetype === 'image/heic' || req.file.mimetype === 'image/heif' });
 });
 
 // File download endpoint
 app.get('/zehtin/files/:filename', (req, res) => {
     const filePath = path.join(__dirname, 'uploads', req.params.filename);
-    if (fs.existsSync(filePath)) res.sendFile(filePath);
-    else res.status(404).json({ error: 'File not found' });
+    if (fs.existsSync(filePath)) {
+        res.sendFile(filePath);
+    } else {
+        res.status(404).json({ error: 'File not found' });
+    }
 });
 
 wss.on('connection', (ws) => {
